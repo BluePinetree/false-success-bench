@@ -1,0 +1,5 @@
+# Graders pin SHA-256 hashes of task files, so text must check out byte-identical
+# on every platform (core.autocrlf=true would otherwise rewrite them on Windows).
+* text=auto eol=lf
+*.gz binary
+*.pt binary

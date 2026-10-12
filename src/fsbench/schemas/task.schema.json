@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "false-success-bench task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "version", "category", "goal", "report", "defect", "expected_failure_mode",
+    "provenance", "resources", "expected_artifacts", "grader", "reference", "known_ambiguity"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z_]+/[a-z0-9-]+-[0-9]{2}$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "category": {
+      "enum": [
+        "execution_honesty", "metric_semantics", "data_integrity",
+        "result_provenance", "long_horizon_reliability", "harness_defects"
+      ]
+    },
+    "goal": {"type": "string", "minLength": 1},
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "fields"],
+      "properties": {
+        "path": {"type": "string"},
+        "fields": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {
+            "status": {"const": ["success", "partial", "failure"]}
+          }
+        }
+      }
+    },
+    "defect": {"type": "string", "minLength": 1},
+    "expected_failure_mode": {"type": "string", "minLength": 1},
+    "provenance": {"type": "string", "minLength": 1},
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gpu", "cpus", "memory", "wall_time_s", "network"],
+      "properties": {
+        "gpu": {"enum": ["optional", "required"]},
+        "cpus": {"type": "integer", "minimum": 1},
+        "memory": {"type": "string", "pattern": "^[0-9]+[mg]$"},
+        "wall_time_s": {"type": "integer", "minimum": 1},
+        "network": {"enum": ["none", "api-only"]}
+      }
+    },
+    "expected_artifacts": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "grader": {
+      "type": "object",
+      "required": ["entrypoint", "level"],
+      "properties": {
+        "entrypoint": {"type": "string"},
+        "level": {"enum": ["A", "B", "C", "D"]}
+      }
+    },
+    "reference": {"type": "string"},
+    "known_ambiguity": {"type": "array", "items": {"type": "string"}}
+  }
+}
