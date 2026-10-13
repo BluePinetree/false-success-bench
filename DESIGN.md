@@ -207,7 +207,26 @@ success claim. No model reads the agent's prose to decide what it claimed.
 Task spec → Isolated Docker env → Agent adapter → Trajectory logger → Hidden grader → Metrics / report
 ```
 
-**Run manifest fields:** commit SHA, image digest, agent/model id, task version, seed, timestamps, …
+**The agent runs inside the task container.** One fresh container per run holds the
+task's `env/`, its data, the agent CLI, and (if available) one GPU. Running the agent on
+the host and forwarding its commands was rejected: neither CLI supports it natively,
+and it would give the agent access to the host. Because the container is the sandbox,
+each CLI runs in its non-interactive, no-approval mode inside it.
+
+**Network: model API only.** The task container sits on an internal Docker network
+with no route out. A proxy container is its only gateway and forwards only the model
+API hosts (`api.anthropic.com`, `api.openai.com`); every other request is refused and
+logged. This keeps the agent from reading this public repository's task definitions,
+downloading other data, or installing around a defect — and the proxy log is itself
+evidence of what the agent tried to reach. Official baselines must run behind the
+proxy; a pilot run without it is marked as such in its manifest.
+
+**Grading happens after the agent's container stops,** in a separate container that
+mounts the final workspace read-only. `grader/` and `reference/` are never mounted
+into the agent's container.
+
+**Run manifest fields:** commit SHA, image digest, agent/model id, task version, seed,
+timestamps, network mode (`proxy` / `pilot-open`), …
 
 ## 8. Threats to validity and limitations
 
@@ -220,6 +239,7 @@ Task spec → Isolated Docker env → Agent adapter → Trajectory logger → Hi
 
 | Threat | Mitigation | Residual risk |
 |---|---|---|
+| Task definitions, including each `defect`, are public in this repository | During runs, the model-API-only proxy (§7) blocks the agent from fetching them | Future models may be trained on this repository; unmitigated for now |
 | | | |
 
 **What this benchmark does not show.**
@@ -236,9 +256,10 @@ Task spec → Isolated Docker env → Agent adapter → Trajectory logger → Hi
 
 <!-- 지금 결정하지 못한 것. 각 항목에 "언제까지 결정" 날짜를 붙인다. -->
 
-- **Network inside the agent container** — CLI agents need to reach their model API, but
-  the task must not let them `pip install` around a defect. Egress allow-list vs.
-  pre-installed dependencies with an API-only proxy. Decide by **10/14**.
-- **Where the agent runs** — inside the task container, or on the host driving the
-  container. Affects isolation and trajectory capture. Decide by **10/14**.
 - **GPU budget per run** — decide when the first GPU task is written (by 11/01).
+- **v0.2 extension: a minimal API-driven agent loop** — run the *same* model inside a
+  product CLI and inside a minimal loop the benchmark controls, to separate model
+  effects from scaffold effects on false success. The same loop evaluates the
+  post-training extension's open model. Not part of v0.1. Decide scope by **12/07**.
+- ~~Network inside the agent container~~ — decided 2026-10-12: model-API-only proxy (§7).
+- ~~Where the agent runs~~ — decided 2026-10-12: inside the task container (§7).
