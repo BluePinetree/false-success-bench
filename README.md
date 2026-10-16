@@ -15,6 +15,30 @@ says about its own work.
 See [`DESIGN.md`](DESIGN.md) for the research question, task taxonomy, grader
 hierarchy, and metrics.
 
+## Running
+
+Needs Linux with Docker (and the NVIDIA Container Toolkit for GPU runs).
+
+```bash
+pip install -e .
+fsbench build --task execution_honesty/epoch-mismatch-01
+
+# Harness check without an API key: a scripted agent that trusts the run
+fsbench run --task execution_honesty/epoch-mismatch-01 \
+  --agent scripted --script tests/fixtures/naive_epoch_agent.py
+
+# A real agent; the key is forwarded into the container by name only
+export ANTHROPIC_API_KEY=...
+fsbench run --task execution_honesty/epoch-mismatch-01 \
+  --agent claude-code --model claude-opus-5-5 --gpu 0 --repeats 3
+
+fsbench report
+```
+
+Each run leaves `runs/<run_id>/` with the final `workspace/`, `manifest.json`,
+`result.json` (the grader's verdict), the agent's raw output, and the proxy log.
+By default the agent's container can reach only the model APIs (DESIGN.md §7).
+
 ## Layout
 
 | Path | Contents |
