@@ -1,5 +1,4 @@
 """Run manifest: commit SHA, image digest, agent/model id, task version, seed, timestamps."""
-import os
 import subprocess
 from datetime import datetime, timezone
 
@@ -36,10 +35,11 @@ def build(*, run_id, task, adapter, model, agent_version, images, gpu, repeat, o
         "images": images,
         "benchmark": repo_state(),
         # Names only; values are never recorded. The host name is deliberately omitted.
-        "secret_env_forwarded": [k for k in adapter.secret_env if os.environ.get(k)],
+        "secret_env_forwarded": outcome["secret_env_forwarded"],
         "started_at": iso(outcome["started_at"]),
         "finished_at": iso(outcome["finished_at"]),
         "wall_time_s": outcome["wall_time_s"],
         "timed_out": outcome["timed_out"],
         "container_exit_code": outcome["container_exit_code"],
+        "infra_error": outcome["infra_error"],
     }

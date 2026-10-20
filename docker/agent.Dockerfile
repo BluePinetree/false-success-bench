@@ -14,4 +14,5 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} @openai/code
  && npm cache clean --force
 
 # The harness runs the container as the invoking (non-root) user with HOME here.
-RUN mkdir -p /tmp/agent-home && chmod 1777 /tmp/agent-home
+# Not under /tmp: Codex refuses to install its helper binaries in a temporary directory.
+RUN mkdir -p /home/agent && chmod 1777 /home/agent

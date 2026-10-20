@@ -1,4 +1,5 @@
 """Harness logic that can be checked without Docker: adapters, run arguments, report."""
+import os
 import subprocess
 from pathlib import Path
 
@@ -42,8 +43,10 @@ class FakeDocker:
 
     def __init__(self):
         self.calls = []
+        self.envs = []
 
-    def __call__(self, *args, timeout=None, check=True):
+    def __call__(self, *args, timeout=None, check=True, env=None):
+        self.envs.append(env)
         self.calls.append(list(args))
         if args[0] == "wait":
             stdout = "0\n"
@@ -98,16 +101,50 @@ def test_run_uses_internal_network_and_cleans_up(fake_docker, tmp_path):
 
 
 def test_timeout_kills_the_container(fake_docker, tmp_path, monkeypatch):
-    def wait_times_out(*args, timeout=None, check=True):
+    def wait_times_out(*args, timeout=None, check=True, env=None):
         if args[0] == "wait" and timeout is not None:
             raise subprocess.TimeoutExpired(args, timeout)
-        return FakeDocker.__call__(fake_docker, *args, timeout=timeout, check=check)
+        return FakeDocker.__call__(fake_docker, *args, timeout=timeout, check=check, env=env)
 
     monkeypatch.setattr(sandbox, "docker", wait_times_out)
     t = tasks.load(TASK_ID)
     outcome = sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
     assert outcome["timed_out"] is True
     assert any(c[0] == "kill" for c in fake_docker.calls)
+
+
+def test_codex_key_alias_is_forwarded_by_name(fake_docker, tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    t = tasks.load(TASK_ID)
+    outcome = sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
+    args = _run_args(fake_docker)
+    assert "CODEX_API_KEY" in args and "OPENAI_API_KEY" in args
+    assert not any("sk-openai-secret" in a for c in fake_docker.calls for a in c)
+    run_env = fake_docker.envs[fake_docker.calls.index(args)]
+    assert run_env["CODEX_API_KEY"] == "sk-openai-secret"
+    assert "CODEX_API_KEY" not in os.environ  # the harness's own environment is untouched
+    assert outcome["secret_env_forwarded"] == ["OPENAI_API_KEY", "CODEX_API_KEY"]
+
+
+def test_auth_failure_without_report_is_an_infra_error(fake_docker, tmp_path, monkeypatch):
+    def fake_logs(cmd, stdout=None, stderr=None, check=False):
+        if stdout is not None and cmd[:2] == ["docker", "logs"] and not cmd[2].endswith("-proxy"):
+            stdout.write('{"type":"turn.failed","error":{"message":"401 Unauthorized: Missing bearer"}}\n')
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_logs)
+    t = tasks.load(TASK_ID)
+    outcome = sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
+    assert outcome["infra_error"] == "401 Unauthorized"
+
+
+def test_report_excludes_infra_errors():
+    runs = [_run("codex", "success", "pass", False),
+            {**_run("codex", "none", "fail", False), "infra_error": "401 Unauthorized"}]
+    (row,) = report.summarize(runs)
+    assert row["runs"] == 1
+    assert row["infra_errors_excluded"] == 1
 
 
 def test_proxy_listens_only_on_the_runs_internal_gateway(fake_docker, tmp_path):

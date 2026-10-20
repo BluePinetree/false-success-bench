@@ -20,8 +20,9 @@ PROXY_PORT = 8888
 CONTAINER_WORKSPACE = "/workspace"
 
 
-def docker(*args, timeout=None, check=True):
-    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout, check=check)
+def docker(*args, timeout=None, check=True, env=None):
+    return subprocess.run(["docker", *args], capture_output=True, text=True,
+                          timeout=timeout, check=check, env=env)
 
 
 def image_id(tag: str) -> str:
@@ -81,7 +82,7 @@ def _user_args():
     # Run as the invoking user so the workspace stays owned by them, and because
     # Claude Code refuses its no-approval mode as root.
     if hasattr(os, "getuid"):
-        return ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp/agent-home"]
+        return ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/home/agent"]
     return []
 
 
@@ -107,7 +108,14 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dic
     name = f"fsb-{run_dir.name}"
     proxy = f"{name}-proxy"
     res = task.spec["resources"]
-    secrets = [os.environ[k] for k in adapter.secret_env if os.environ.get(k)]
+    # The environment the agent container is started from. Aliases let one host key serve
+    # a CLI that reads it under another name, still forwarded by name only.
+    env = dict(os.environ)
+    for target, source in adapter.env_aliases.items():
+        if not env.get(target) and env.get(source):
+            env[target] = env[source]
+    forwarded = [k for k in adapter.secret_env if env.get(k)]
+    secrets = sorted({env[k] for k in forwarded})
 
     created = []
     try:
@@ -126,9 +134,8 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dic
                 "-v", f"{workspace.resolve()}:{CONTAINER_WORKSPACE}", "-w", CONTAINER_WORKSPACE]
         if gpu is not None:
             args += ["--gpus", f"device={gpu}"]
-        for key in adapter.secret_env:
-            if os.environ.get(key):
-                args += ["-e", key]  # by name: docker reads the value from this process's env
+        for key in forwarded:
+            args += ["-e", key]  # by name: docker reads the value from `env`
         for key, value in adapter.env.items():
             args += ["-e", f"{key}={value}"]
         for host, container in adapter.mounts.items():
@@ -136,7 +143,7 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dic
         args += [task.agent_image, *adapter.command(task.spec["goal"], model)]
 
         started = time.time()
-        docker(*args)
+        docker(*args, env=env)
         created.append(("container", name))
 
         timed_out = False
@@ -155,6 +162,14 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dic
             subprocess.run(["docker", "logs", proxy], stdout=log, stderr=log, check=False)
         for f in ("agent_stdout.jsonl", "agent_stderr.txt"):
             _redact(run_dir / f, secrets)
+        # Only a run that left no report can be an infrastructure failure: an agent that
+        # wrote one did its work, even if the API hiccupped and recovered along the way.
+        infra_error = None
+        if not (workspace / task.spec["report"]["path"]).exists():
+            infra_error = adapter.infra_error(
+                (run_dir / "agent_stdout.jsonl").read_text(encoding="utf-8", errors="replace")
+                + (run_dir / "agent_stderr.txt").read_text(encoding="utf-8", errors="replace")
+            )
 
         return {
             "container_exit_code": exit_code,
@@ -162,6 +177,8 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dic
             "started_at": started,
             "finished_at": finished,
             "wall_time_s": round(finished - started, 1),
+            "secret_env_forwarded": forwarded,
+            "infra_error": infra_error,
         }
     finally:
         for kind, obj in reversed(created):

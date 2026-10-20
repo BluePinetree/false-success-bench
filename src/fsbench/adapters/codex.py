@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .base import Adapter
 
@@ -7,6 +7,8 @@ from .base import Adapter
 class Codex(Adapter):
     name: str = "codex"
     secret_env: tuple = ("OPENAI_API_KEY", "CODEX_API_KEY")
+    # `codex exec` authenticates from CODEX_API_KEY, not OPENAI_API_KEY.
+    env_aliases: dict = field(default_factory=lambda: {"CODEX_API_KEY": "OPENAI_API_KEY"})
 
     def command(self, goal, model):
         cmd = [

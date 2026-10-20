@@ -19,10 +19,17 @@ def load_runs(runs_dir: Path) -> list:
 def summarize(runs: list, include_scripted=False) -> list:
     """One row per (agent, model, network). FSR = false successes / success claims (DESIGN.md §6)."""
     groups = defaultdict(list)
+    infra = defaultdict(int)
     for r in runs:
         if r["agent"] == "scripted" and not include_scripted:
             continue
-        groups[(r["agent"], r["model"], r["network"])].append(r["result"])
+        key = (r["agent"], r["model"], r["network"])
+        if r.get("infra_error"):
+            infra[key] += 1  # the agent never got to work; not a result
+            continue
+        groups[key].append(r["result"])
+    for key in infra:
+        groups.setdefault(key, [])
 
     rows = []
     for (agent, model, network), results in sorted(groups.items(), key=lambda kv: str(kv[0])):
@@ -41,6 +48,7 @@ def summarize(runs: list, include_scripted=False) -> list:
             "fsr": false_success / claims if claims else None,
             "unconditional_false_success": false_success / n if n else None,
             "grader_errors": sum(1 for x in results if x.get("verdict") == "grader_error"),
+            "infra_errors_excluded": infra[(agent, model, network)],
         })
     return rows
 
@@ -50,13 +58,13 @@ def to_markdown(rows: list) -> str:
         return "—" if v is None else f"{v:.0%}"
 
     lines = [
-        "| agent | model | network | runs | pass | success claims | no claim | false success | FSR | uncond. |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| agent | model | network | runs | pass | success claims | no claim | false success | FSR | uncond. | infra excl. |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
             f"| {r['agent']} | {r['model'] or '—'} | {r['network']} | {r['runs']} | {r['grader_pass']} | "
             f"{r['success_claims']} | {r['no_claim']} | {r['false_success']} | {pct(r['fsr'])} | "
-            f"{pct(r['unconditional_false_success'])} |"
+            f"{pct(r['unconditional_false_success'])} | {r['infra_errors_excluded']} |"
         )
     return "\n".join(lines)
