@@ -218,15 +218,17 @@ with no route out. A proxy container is its only gateway and forwards only the m
 API hosts (`api.anthropic.com`, `api.openai.com`); every other request is refused and
 logged. This keeps the agent from reading this public repository's task definitions,
 downloading other data, or installing around a defect — and the proxy log is itself
-evidence of what the agent tried to reach. Official baselines must run behind the
-proxy; a pilot run without it is marked as such in its manifest.
+evidence of what the agent tried to reach. There is no unproxied mode. On hosts
+where containers on Docker bridges cannot reach the outside, the proxy runs in the
+host's network namespace but listens only on the run's internal-network gateway
+address and accepts only that subnet.
 
 **Grading happens after the agent's container stops,** in a separate container that
 mounts the final workspace read-only. `grader/` and `reference/` are never mounted
 into the agent's container.
 
 **Run manifest fields:** commit SHA, image digest, agent/model id, task version, seed,
-timestamps, network mode (`proxy` / `pilot-open`), …
+timestamps, network mode, …
 
 ## 8. Threats to validity and limitations
 

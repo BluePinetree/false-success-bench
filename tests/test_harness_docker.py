@@ -63,7 +63,7 @@ def test_scripted_naive_agent_end_to_end_is_false_success(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
-    outcome = sandbox.run_agent(t, adapter, None, run_dir, None, "proxy")
+    outcome = sandbox.run_agent(t, adapter, None, run_dir, None)
     assert outcome["container_exit_code"] == 0, (run_dir / "agent_stderr.txt").read_text()
     assert outcome["timed_out"] is False
 

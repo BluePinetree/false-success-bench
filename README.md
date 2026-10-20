@@ -37,7 +37,7 @@ fsbench report
 
 Each run leaves `runs/<run_id>/` with the final `workspace/`, `manifest.json`,
 `result.json` (the grader's verdict), the agent's raw output, and the proxy log.
-By default the agent's container can reach only the model APIs (DESIGN.md §7).
+The agent's container can reach only the model APIs, through a per-run proxy (DESIGN.md §7).
 
 ## Layout
 

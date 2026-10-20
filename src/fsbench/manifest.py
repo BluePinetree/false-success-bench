@@ -22,7 +22,7 @@ def iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds")
 
 
-def build(*, run_id, task, adapter, model, agent_version, images, gpu, network, repeat, outcome) -> dict:
+def build(*, run_id, task, adapter, model, agent_version, images, gpu, repeat, outcome) -> dict:
     return {
         "run_id": run_id,
         "task_id": task.id,
@@ -31,7 +31,7 @@ def build(*, run_id, task, adapter, model, agent_version, images, gpu, network, 
         "agent_version": agent_version,
         "model": model,
         "repeat": repeat,
-        "network": "proxy" if network == "proxy" else "pilot-open",
+        "network": "proxy",  # the only mode: model APIs only (DESIGN.md §7)
         "gpu": gpu,
         "images": images,
         "benchmark": repo_state(),

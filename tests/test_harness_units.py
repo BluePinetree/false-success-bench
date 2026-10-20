@@ -45,7 +45,12 @@ class FakeDocker:
 
     def __call__(self, *args, timeout=None, check=True):
         self.calls.append(list(args))
-        stdout = "0\n" if args[0] == "wait" else ""
+        if args[0] == "wait":
+            stdout = "0\n"
+        elif args[:2] == ("network", "inspect"):
+            stdout = "172.30.0.1 172.30.0.0/16\n"
+        else:
+            stdout = ""
         return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
 
 
@@ -53,6 +58,7 @@ class FakeDocker:
 def fake_docker(monkeypatch):
     fake = FakeDocker()
     monkeypatch.setattr(sandbox, "docker", fake)
+    monkeypatch.setattr(sandbox, "wait_listening", lambda host, port: None)
     monkeypatch.setattr(sandbox.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
     return fake
 
@@ -64,7 +70,7 @@ def _run_args(fake):
 def test_run_forwards_secrets_by_name_only(fake_docker, tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret-value")
     t = tasks.load(TASK_ID)
-    sandbox.run_agent(t, adapters.get("claude-code"), "m", tmp_path / "run", None, "proxy")
+    sandbox.run_agent(t, adapters.get("claude-code"), "m", tmp_path / "run", None)
     flat = " ".join(" ".join(c) for c in fake_docker.calls)
     assert "sk-ant-secret-value" not in flat
     args = _run_args(fake_docker)
@@ -73,7 +79,7 @@ def test_run_forwards_secrets_by_name_only(fake_docker, tmp_path, monkeypatch):
 
 def test_run_never_mounts_grader_or_reference(fake_docker, tmp_path):
     t = tasks.load(TASK_ID)
-    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", "0", "proxy")
+    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", "0")
     args = _run_args(fake_docker)
     mounts = [args[i + 1] for i, a in enumerate(args) if a == "-v"]
     assert mounts == [f"{(tmp_path / 'run' / 'workspace').resolve()}:/workspace"]
@@ -82,9 +88,9 @@ def test_run_never_mounts_grader_or_reference(fake_docker, tmp_path):
     assert args[args.index("--gpus") + 1] == "device=0"
 
 
-def test_proxy_mode_uses_internal_network_and_cleans_up(fake_docker, tmp_path):
+def test_run_uses_internal_network_and_cleans_up(fake_docker, tmp_path):
     t = tasks.load(TASK_ID)
-    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None, "proxy")
+    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
     create = next(c for c in fake_docker.calls if c[:2] == ["network", "create"])
     assert "--internal" in create
     removed = [c for c in fake_docker.calls if c[:2] in (["rm", "-f"], ["network", "rm"])]
@@ -99,18 +105,21 @@ def test_timeout_kills_the_container(fake_docker, tmp_path, monkeypatch):
 
     monkeypatch.setattr(sandbox, "docker", wait_times_out)
     t = tasks.load(TASK_ID)
-    outcome = sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None, "open")
+    outcome = sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
     assert outcome["timed_out"] is True
     assert any(c[0] == "kill" for c in fake_docker.calls)
 
 
-def test_dns_override_applies_only_to_containers_that_go_outside(fake_docker, tmp_path, monkeypatch):
-    monkeypatch.setenv("FSB_DNS", "10.0.0.53, 10.0.0.54")
+def test_proxy_listens_only_on_the_runs_internal_gateway(fake_docker, tmp_path):
     t = tasks.load(TASK_ID)
-    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None, "proxy")
+    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None)
     proxy_run = next(c for c in fake_docker.calls if c[0] == "run" and sandbox.PROXY_IMAGE in c)
-    assert proxy_run.count("--dns") == 2 and "10.0.0.54" in proxy_run
-    assert "--dns" not in _run_args(fake_docker)  # the agent never resolves outside names itself
+    assert proxy_run[proxy_run.index("--network") + 1] == "host"
+    assert "FSB_PROXY_LISTEN=172.30.0.1" in proxy_run
+    assert "FSB_PROXY_ALLOW=172.30.0.0/16" in proxy_run
+    agent = _run_args(fake_docker)
+    assert agent[agent.index("--network") + 1].endswith("-int")
+    assert "HTTPS_PROXY=http://172.30.0.1:8888" in agent
 
 
 def _run(agent, claim, verdict, false_success, network="proxy"):

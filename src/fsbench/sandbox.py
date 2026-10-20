@@ -7,6 +7,7 @@ or keep holding a GPU.
 """
 import os
 import shutil
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -25,14 +26,6 @@ def docker(*args, timeout=None, check=True):
 
 def image_id(tag: str) -> str:
     return docker("image", "inspect", "--format", "{{.Id}}", tag).stdout.strip()
-
-
-def dns_args():
-    """`--dns` flags from FSB_DNS (comma-separated), for hosts whose network blocks the
-    public resolvers Docker falls back to. Applied only to containers that need the
-    outside world: the proxy, and the agent in `open` mode."""
-    servers = [s.strip() for s in os.environ.get("FSB_DNS", "").split(",") if s.strip()]
-    return [arg for s in servers for arg in ("--dns", s)]
 
 
 def build_images(task: Task, claude_code_version: str, codex_version: str, build_network=None) -> dict:
@@ -56,10 +49,32 @@ def build_images(task: Task, claude_code_version: str, codex_version: str, build
 
 
 def start_proxy(proxy: str, net: str) -> str:
-    """Start an egress proxy on the default bridge and attach it to the internal network."""
-    docker("run", "-d", "--name", proxy, *dns_args(), PROXY_IMAGE)
-    docker("network", "connect", net, proxy)
-    return f"http://{proxy}:{PROXY_PORT}"
+    """Start the egress proxy for one internal network and return its URL.
+
+    The proxy shares the host's network namespace, because on some hosts containers on
+    Docker bridges cannot reach the outside at all while the host can. It listens only
+    on the internal network's gateway address and accepts only that subnet, so it is
+    reachable from that run's agent container and from nowhere else.
+    """
+    fmt = "{{(index .IPAM.Config 0).Gateway}} {{(index .IPAM.Config 0).Subnet}}"
+    gateway, subnet = docker("network", "inspect", net, "-f", fmt).stdout.split()
+    docker("run", "-d", "--name", proxy, "--network", "host",
+           "-e", f"FSB_PROXY_LISTEN={gateway}", "-e", f"FSB_PROXY_ALLOW={subnet}",
+           "-e", f"FSB_PROXY_PORT={PROXY_PORT}", PROXY_IMAGE)
+    wait_listening(gateway, PROXY_PORT)
+    return f"http://{gateway}:{PROXY_PORT}"
+
+
+def wait_listening(host: str, port: int, timeout: float = 10.0):
+    deadline = time.time() + timeout
+    while True:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return
+        except OSError:
+            if time.time() > deadline:
+                raise RuntimeError(f"proxy did not start listening on {host}:{port}")
+            time.sleep(0.2)
 
 
 def _user_args():
@@ -79,33 +94,32 @@ def _redact(path: Path, secrets: list):
     path.write_text(text, encoding="utf-8")
 
 
-def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None, network: str) -> dict:
-    """Run one agent attempt in a fresh container. Returns what happened, not a verdict."""
+def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None) -> dict:
+    """Run one agent attempt in a fresh container. Returns what happened, not a verdict.
+
+    The agent's container sits on its own internal network; the only way out is the
+    run's proxy, which forwards the model APIs and nothing else (DESIGN.md §7).
+    """
     run_dir = Path(run_dir)
     workspace = run_dir / "workspace"
     shutil.copytree(task.env_dir, workspace)
 
     name = f"fsb-{run_dir.name}"
+    proxy = f"{name}-proxy"
     res = task.spec["resources"]
     secrets = [os.environ[k] for k in adapter.secret_env if os.environ.get(k)]
 
     created = []
     try:
-        if network == "proxy":
-            net = f"{name}-int"
-            proxy = f"{name}-proxy"
-            docker("network", "create", "--internal", net)
-            created.append(("network", net))
-            created.append(("container", proxy))
-            proxy_url = start_proxy(proxy, net)
-            net_args = ["--network", net,
-                        "-e", f"HTTPS_PROXY={proxy_url}", "-e", f"HTTP_PROXY={proxy_url}",
-                        "-e", f"https_proxy={proxy_url}", "-e", f"http_proxy={proxy_url}",
-                        "-e", "NO_PROXY=localhost,127.0.0.1"]
-        elif network == "open":
-            net_args = dns_args()
-        else:
-            raise ValueError(f"unknown network mode {network!r}")
+        net = f"{name}-int"
+        docker("network", "create", "--internal", net)
+        created.append(("network", net))
+        created.append(("container", proxy))
+        proxy_url = start_proxy(proxy, net)
+        net_args = ["--network", net,
+                    "-e", f"HTTPS_PROXY={proxy_url}", "-e", f"HTTP_PROXY={proxy_url}",
+                    "-e", f"https_proxy={proxy_url}", "-e", f"http_proxy={proxy_url}",
+                    "-e", "NO_PROXY=localhost,127.0.0.1"]
 
         args = ["run", "-d", "--name", name, *net_args, *_user_args(),
                 "--cpus", str(res["cpus"]), "--memory", res["memory"], "--pids-limit", "4096",
@@ -137,9 +151,8 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None, networ
         with open(run_dir / "agent_stdout.jsonl", "w", encoding="utf-8") as out, \
                 open(run_dir / "agent_stderr.txt", "w", encoding="utf-8") as err:
             subprocess.run(["docker", "logs", name], stdout=out, stderr=err, check=False)
-        if network == "proxy":
-            with open(run_dir / "proxy.log", "w", encoding="utf-8") as log:
-                subprocess.run(["docker", "logs", f"{name}-proxy"], stdout=log, stderr=log, check=False)
+        with open(run_dir / "proxy.log", "w", encoding="utf-8") as log:
+            subprocess.run(["docker", "logs", proxy], stdout=log, stderr=log, check=False)
         for f in ("agent_stdout.jsonl", "agent_stderr.txt"):
             _redact(run_dir / f, secrets)
 

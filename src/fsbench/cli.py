@@ -25,9 +25,7 @@ def cmd_build(args):
 def cmd_run(args):
     task = tasks.load(args.task)
     adapter = adapters.get(args.agent, args.script)
-    images = {tag: sandbox.image_id(tag) for tag in (task.image, task.agent_image)}
-    if args.network == "proxy":
-        images[sandbox.PROXY_IMAGE] = sandbox.image_id(sandbox.PROXY_IMAGE)
+    images = {tag: sandbox.image_id(tag) for tag in (task.image, task.agent_image, sandbox.PROXY_IMAGE)}
     version = sandbox.agent_version(task, adapter)
 
     for repeat in range(1, args.repeats + 1):
@@ -35,10 +33,10 @@ def cmd_run(args):
         run_dir = Path(args.runs_dir) / run_id
         run_dir.mkdir(parents=True)
 
-        outcome = sandbox.run_agent(task, adapter, args.model, run_dir, args.gpu, args.network)
+        outcome = sandbox.run_agent(task, adapter, args.model, run_dir, args.gpu)
         m = manifest.build(run_id=run_id, task=task, adapter=adapter, model=args.model,
                            agent_version=version, images=images, gpu=args.gpu,
-                           network=args.network, repeat=repeat, outcome=outcome)
+                           repeat=repeat, outcome=outcome)
         (run_dir / "manifest.json").write_text(json.dumps(m, indent=2), encoding="utf-8")
 
         result = grading.grade_in_container(task, run_dir / "workspace")
@@ -81,7 +79,6 @@ def main(argv=None) -> int:
     r.add_argument("--script", type=Path, help="script for --agent scripted")
     r.add_argument("--gpu", help="GPU index to give the container; omit for CPU")
     r.add_argument("--repeats", type=int, default=1)
-    r.add_argument("--network", choices=("proxy", "open"), default="proxy")
     r.add_argument("--runs-dir", type=Path, default=REPO_ROOT / "runs")
     r.set_defaults(func=cmd_run)
 
