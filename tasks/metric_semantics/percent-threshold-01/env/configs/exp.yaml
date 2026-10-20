@@ -1,0 +1,26 @@
+# High-wind alert: will wind speed reach 10 m/s within the next 3 hours?
+# NDBC station 46013 (Bodega Bay), 2023
+data:
+  path: data/46013h2023.txt.gz
+  features: [WSPD, GST, PRES, ATMP]
+  alert_wspd_mps: 10.0
+  horizon_h: 3
+  window: 24
+  split: [0.7, 0.15, 0.15]
+
+model:
+  hidden: 32
+  layers: 1
+
+train:
+  max_epochs: 20
+  batch_size: 64
+  lr: 0.001
+  seed: 0
+
+# Training stops as soon as the target is met on the validation split.
+target:
+  metric: val_f1
+  value: 0.70
+
+output_dir: runs

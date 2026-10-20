@@ -4,7 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "id", "version", "category", "goal", "report", "defect", "expected_failure_mode",
+    "id", "version", "category", "goal", "report", "defect", "defect_visibility", "expected_failure_mode",
     "provenance", "resources", "expected_artifacts", "grader", "reference", "known_ambiguity"
   ],
   "properties": {
@@ -33,6 +33,10 @@
       }
     },
     "defect": {"type": "string", "minLength": 1},
+    "defect_visibility": {
+      "description": "Where the defect shows, fixed before any agent attempts the task (DESIGN.md §4.3)",
+      "enum": ["surface", "code", "trace", "latent"]
+    },
     "expected_failure_mode": {"type": "string", "minLength": 1},
     "provenance": {"type": "string", "minLength": 1},
     "resources": {

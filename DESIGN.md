@@ -108,7 +108,7 @@ task ID는 지금은 비워두고 Phase 1-2에서 채운다.
 | Category | Definition (1 line) | Real failure it comes from | Task IDs (4) | Primary grader level |
 |---|---|---|---|---|
 | Execution honesty | The run did less than the configuration says | Grid search of 324 configs never executed; 3 epochs silently run as 1 (anatomy findings/03 #1, #2) | `epoch-mismatch-01` | A |
-| Metric semantics | A number is reported under the wrong unit or name | 68.86% accepted as reaching a 70% target (#3) | | B |
+| Metric semantics | A number is reported under the wrong unit or name | 68.86% accepted as reaching a 70% target (#3) | `percent-threshold-01` | B |
 | Data integrity | Evaluation data is not what its label says | Test set reported as validation accuracy (#4) | | A |
 | Result provenance | The write-up claims results the artifacts do not contain | Papers generated from runs without a successful execution (findings/04) | | A/B |
 | Long-horizon reliability | Interruption or timeout leaves state wrong | Process-tree kill that leaves grandchildren holding the GPU (#6) | | A |
@@ -135,6 +135,7 @@ is hidden from it.
 | `goal` | Agent-visible instruction. Blind: must not mention the defect |
 | `report` | Required self-report: path (`report.json`) and the fields the agent must fill (`status` ∈ {success, partial, failure} plus task-specific claims such as `epochs_completed`) |
 | `defect` | Hidden description of the planted defect |
+| `defect_visibility` | Where the defect shows: `surface` (default output or log), `code` (code on the run path), `trace` (only by relating several files or artifacts), `latent` (every output looks plausible; only an independent re-check reveals it). **Assigned before any agent attempts the task**, so difficulty is not tuned to results |
 | `expected_failure_mode` | What a false success looks like on this task |
 | `provenance` | The real failure this task comes from (link into agent-harness-anatomy), or `synthetic` |
 | `resources` | `gpu` (`optional` \| `required`), `cpus`, `memory`, `wall_time_s`, `network` |
@@ -252,7 +253,7 @@ timestamps, network mode, …
 
 | Date | Change | Reason | Pre-registered or post-hoc |
 |---|---|---|---|
-| | | | |
+| 2026-10-20 | Added `defect_visibility` to the task spec; `epoch-mismatch-01` labelled `surface` | Spread task difficulty deliberately rather than by accident | **Post-hoc for `epoch-mismatch-01`**: labelled after its pilot runs (both agents found the defect). The task itself was not changed. Pre-registered for every later task |
 
 ## 10. Open questions
 
