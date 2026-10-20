@@ -39,9 +39,7 @@ def test_proxy_allows_only_model_apis(tmp_path):
     net, proxy = f"fsb-test-{os.getpid()}-int", f"fsb-test-{os.getpid()}-proxy"
     try:
         sandbox.docker("network", "create", "--internal", net)
-        sandbox.docker("run", "-d", "--name", proxy, sandbox.PROXY_IMAGE)
-        sandbox.docker("network", "connect", net, proxy)
-        url = f"http://{proxy}:{sandbox.PROXY_PORT}"
+        url = sandbox.start_proxy(proxy, net)
 
         def probe(target, via_proxy=True):
             env = ["-e", f"HTTPS_PROXY={url}"] if via_proxy else []

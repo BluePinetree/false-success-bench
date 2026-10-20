@@ -27,19 +27,39 @@ def image_id(tag: str) -> str:
     return docker("image", "inspect", "--format", "{{.Id}}", tag).stdout.strip()
 
 
-def build_images(task: Task, claude_code_version: str, codex_version: str) -> dict:
-    """Build the task image, the task+agents image on top of it, and the proxy image."""
-    subprocess.run(["docker", "build", "-t", task.image, str(task.env_dir)], check=True)
+def dns_args():
+    """`--dns` flags from FSB_DNS (comma-separated), for hosts whose network blocks the
+    public resolvers Docker falls back to. Applied only to containers that need the
+    outside world: the proxy, and the agent in `open` mode."""
+    servers = [s.strip() for s in os.environ.get("FSB_DNS", "").split(",") if s.strip()]
+    return [arg for s in servers for arg in ("--dns", s)]
+
+
+def build_images(task: Task, claude_code_version: str, codex_version: str, build_network=None) -> dict:
+    """Build the task image, the task+agents image on top of it, and the proxy image.
+
+    `build_network="host"` lets build steps use the host's resolver; only package
+    downloads during the build are affected, never a run.
+    """
+    net = ["--network", build_network] if build_network else []
+    subprocess.run(["docker", "build", *net, "-t", task.image, str(task.env_dir)], check=True)
     subprocess.run([
-        "docker", "build", "-t", task.agent_image,
+        "docker", "build", *net, "-t", task.agent_image,
         "-f", str(DOCKER_DIR / "agent.Dockerfile"),
         "--build-arg", f"TASK_IMAGE={task.image}",
         "--build-arg", f"CLAUDE_CODE_VERSION={claude_code_version}",
         "--build-arg", f"CODEX_VERSION={codex_version}",
         str(DOCKER_DIR),
     ], check=True)
-    subprocess.run(["docker", "build", "-t", PROXY_IMAGE, str(DOCKER_DIR / "proxy")], check=True)
+    subprocess.run(["docker", "build", *net, "-t", PROXY_IMAGE, str(DOCKER_DIR / "proxy")], check=True)
     return {tag: image_id(tag) for tag in (task.image, task.agent_image, PROXY_IMAGE)}
+
+
+def start_proxy(proxy: str, net: str) -> str:
+    """Start an egress proxy on the default bridge and attach it to the internal network."""
+    docker("run", "-d", "--name", proxy, *dns_args(), PROXY_IMAGE)
+    docker("network", "connect", net, proxy)
+    return f"http://{proxy}:{PROXY_PORT}"
 
 
 def _user_args():
@@ -76,16 +96,14 @@ def run_agent(task: Task, adapter, model, run_dir: Path, gpu: str | None, networ
             proxy = f"{name}-proxy"
             docker("network", "create", "--internal", net)
             created.append(("network", net))
-            docker("run", "-d", "--name", proxy, PROXY_IMAGE)
             created.append(("container", proxy))
-            docker("network", "connect", net, proxy)
-            proxy_url = f"http://{proxy}:{PROXY_PORT}"
+            proxy_url = start_proxy(proxy, net)
             net_args = ["--network", net,
                         "-e", f"HTTPS_PROXY={proxy_url}", "-e", f"HTTP_PROXY={proxy_url}",
                         "-e", f"https_proxy={proxy_url}", "-e", f"http_proxy={proxy_url}",
                         "-e", "NO_PROXY=localhost,127.0.0.1"]
         elif network == "open":
-            net_args = []
+            net_args = dns_args()
         else:
             raise ValueError(f"unknown network mode {network!r}")
 

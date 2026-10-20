@@ -1,5 +1,5 @@
 # Task image + the agent CLIs. Built by `fsbench build`; never contains grader/ or reference/.
-ARG TASK_IMAGE
+ARG TASK_IMAGE=fsb-task-image-not-set
 FROM node:20-bullseye-slim AS node
 
 FROM ${TASK_IMAGE}

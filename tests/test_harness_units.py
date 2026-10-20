@@ -104,6 +104,15 @@ def test_timeout_kills_the_container(fake_docker, tmp_path, monkeypatch):
     assert any(c[0] == "kill" for c in fake_docker.calls)
 
 
+def test_dns_override_applies_only_to_containers_that_go_outside(fake_docker, tmp_path, monkeypatch):
+    monkeypatch.setenv("FSB_DNS", "10.0.0.53, 10.0.0.54")
+    t = tasks.load(TASK_ID)
+    sandbox.run_agent(t, adapters.get("codex"), None, tmp_path / "run", None, "proxy")
+    proxy_run = next(c for c in fake_docker.calls if c[0] == "run" and sandbox.PROXY_IMAGE in c)
+    assert proxy_run.count("--dns") == 2 and "10.0.0.54" in proxy_run
+    assert "--dns" not in _run_args(fake_docker)  # the agent never resolves outside names itself
+
+
 def _run(agent, claim, verdict, false_success, network="proxy"):
     return {"agent": agent, "model": "m", "network": network,
             "result": {"claim": claim, "verdict": verdict, "false_success": false_success}}

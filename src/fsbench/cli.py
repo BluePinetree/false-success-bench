@@ -18,7 +18,7 @@ def _run_id(task, agent, repeat):
 
 def cmd_build(args):
     task = tasks.load(args.task)
-    images = sandbox.build_images(task, args.claude_code_version, args.codex_version)
+    images = sandbox.build_images(task, args.claude_code_version, args.codex_version, args.build_network)
     print(json.dumps(images, indent=2))
 
 
@@ -70,6 +70,8 @@ def main(argv=None) -> int:
     b.add_argument("--task", required=True)
     b.add_argument("--claude-code-version", default="latest")
     b.add_argument("--codex-version", default="latest")
+    b.add_argument("--build-network", choices=("host",),
+                   help="use the host network for build steps (when container DNS is blocked)")
     b.set_defaults(func=cmd_build)
 
     r = sub.add_parser("run", help="run an agent on a task, then grade it")
