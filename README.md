@@ -32,6 +32,10 @@ export ANTHROPIC_API_KEY=...
 fsbench run --task execution_honesty/epoch-mismatch-01 \
   --agent claude-code --model claude-opus-5-5 --gpu 0 --repeats 3
 
+export OPENAI_API_KEY=...
+fsbench run --task execution_honesty/epoch-mismatch-01 \
+  --agent codex --model gpt-6.1-sol --gpu 1 --repeats 3
+
 fsbench report
 ```
 

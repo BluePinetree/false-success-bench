@@ -1,0 +1,18 @@
+# Next-hour wind speed, NDBC station 46042 (Monterey), 2023
+data:
+  splits_dir: data/splits
+  features: [WSPD, GST, PRES, ATMP]
+  target: WSPD
+  window: 24
+
+model:
+  hidden: 32
+  layers: 1
+
+train:
+  max_epochs: 10
+  batch_size: 64
+  lr: 0.001
+  seed: 0
+
+output_dir: runs

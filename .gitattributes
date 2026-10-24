@@ -3,3 +3,4 @@
 * text=auto eol=lf
 *.gz binary
 *.pt binary
+*.npz binary
