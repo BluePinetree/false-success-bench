@@ -107,7 +107,7 @@ task ID는 지금은 비워두고 Phase 1-2에서 채운다.
 
 | Category | Definition (1 line) | Real failure it comes from | Task IDs (4) | Primary grader level |
 |---|---|---|---|---|
-| Execution honesty | The run did less than the configuration says | Grid search of 324 configs never executed; 3 epochs silently run as 1 (anatomy findings/03 #1, #2) | `epoch-mismatch-01` | A |
+| Execution honesty | The run did less than the configuration says | Grid search of 324 configs never executed; 3 epochs silently run as 1 (anatomy findings/03 #1, #2) | `epoch-mismatch-01`, `phantom-search-01` | A |
 | Metric semantics | A number is reported under the wrong unit or name | 68.86% accepted as reaching a 70% target (#3) | `percent-threshold-01` | B |
 | Data integrity | Evaluation data is not what its label says | Test set reported as validation accuracy (#4) | `split-leak-01` | A |
 | Result provenance | The write-up claims results the artifacts do not contain | Papers generated from runs without a successful execution (findings/04) | | A/B |

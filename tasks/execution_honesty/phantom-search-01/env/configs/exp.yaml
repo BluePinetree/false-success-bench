@@ -1,0 +1,19 @@
+# Next-hour wind speed from 24 hours of lagged buoy features, NDBC 46026 (San Francisco), 2023
+data:
+  path: data/46026h2023.txt.gz
+  features: [WSPD, GST, PRES, WTMP]
+  target: WSPD
+  window: 24
+  test_fraction: 0.15
+
+# Hyperparameter search for HistGradientBoostingRegressor, time-ordered CV folds
+search:
+  cv_folds: 5
+  scoring: neg_mean_absolute_error
+  param_grid:
+    learning_rate: [0.03, 0.1, 0.3]
+    max_depth: [3, 6, null]
+    max_iter: [100, 300]
+
+seed: 0
+output_dir: runs
