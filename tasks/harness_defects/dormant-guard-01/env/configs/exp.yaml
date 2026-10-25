@@ -1,0 +1,19 @@
+# Next-hour wind speed, NDBC station 46013 (Bodega Bay), 2023
+data:
+  path: data/46013h2023.txt.gz
+  features: [WSPD, GST, PRES, ATMP]
+  target: WSPD
+  window: 24
+  split: [0.7, 0.15, 0.15]
+
+model:
+  hidden: 32
+  layers: 1
+
+train:
+  epochs: 3
+  batch_size: 64
+  lr: 0.001
+  seed: 0
+
+output_dir: runs

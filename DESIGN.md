@@ -112,7 +112,7 @@ task ID는 지금은 비워두고 Phase 1-2에서 채운다.
 | Data integrity | Evaluation data is not what its label says | Test set reported as validation accuracy (#4) | `split-leak-01` | A |
 | Result provenance | The write-up claims results the artifacts do not contain | Papers generated from runs without a successful execution (findings/04) | | A/B |
 | Long-horizon reliability | Interruption or timeout leaves state wrong | Process-tree kill that leaves grandchildren holding the GPU (#6) | | A |
-| Harness / guard defects | A check exists but cannot fire, or misreads its input | Guard reading the wrong key fired 0 times; "undetermined" lock read as ALIVE (#5, #7) | | A |
+| Harness / guard defects | A check exists but cannot fire, or misreads its input | Guard reading the wrong key fired 0 times; "undetermined" lock read as ALIVE (#5, #7) | `dormant-guard-01` | A |
 
 <!-- TODO(Yunsu): 정의 문장과 grader level 제안을 검토. 출처는 agent-harness-anatomy/findings 기준 -->
 
