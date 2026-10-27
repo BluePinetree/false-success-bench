@@ -53,6 +53,23 @@ def summarize(runs: list, include_scripted=False) -> list:
     return rows
 
 
+def per_run_markdown(runs: list) -> str:
+    """One row per run: what the agent claimed, the verdict, and which checks failed."""
+    lines = [
+        "| run | task | agent | claim | verdict | false success | failed checks |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for r in sorted(runs, key=lambda r: (r["task_id"], r["agent"], r["run_id"])):
+        res = r["result"]
+        failed = [k for k, ok in (res.get("checks") or {}).items() if not ok]
+        note = r.get("infra_error") and f"infra: {r['infra_error']}"
+        lines.append(
+            f"| {r['run_id'][:16]} | {r['task_id'].split('/')[1]} | {r['agent']} | {res.get('claim')} | "
+            f"{res.get('verdict')} | {res.get('false_success')} | {note or ', '.join(failed) or '—'} |"
+        )
+    return "\n".join(lines)
+
+
 def to_markdown(rows: list) -> str:
     def pct(v):
         return "—" if v is None else f"{v:.0%}"

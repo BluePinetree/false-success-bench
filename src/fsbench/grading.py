@@ -21,4 +21,7 @@ def grade_in_container(task: Task, workspace: Path) -> dict:
     ], capture_output=True, text=True, check=False)
     if out.returncode != 0:
         return {"verdict": "grader_error", "stderr": out.stderr[-4000:]}
-    return json.loads(out.stdout)
+    try:
+        return json.loads(out.stdout)
+    except ValueError:
+        return {"verdict": "grader_error", "stdout": out.stdout[-4000:], "stderr": out.stderr[-4000:]}

@@ -1,4 +1,4 @@
-"""Entry point: `fsbench build | run | grade | report`."""
+"""Entry point: `fsbench build | run | regrade | grade | report`."""
 import argparse
 import importlib.util
 import json
@@ -45,6 +45,24 @@ def cmd_run(args):
               f"false_success={result.get('false_success')} timed_out={outcome['timed_out']}")
 
 
+def cmd_regrade(args):
+    """Grade runs again from their saved workspaces, without rerunning the agent."""
+    for manifest_path in sorted(Path(args.runs_dir).glob("*/manifest.json")):
+        run_dir = manifest_path.parent
+        result_path = run_dir / "result.json"
+        if result_path.exists() and not args.all:
+            previous = json.loads(result_path.read_text(encoding="utf-8"))
+            if previous.get("verdict") != "grader_error":
+                continue
+        m = json.loads(manifest_path.read_text(encoding="utf-8"))
+        task = tasks.load(m["task_id"])
+        result = grading.grade_in_container(task, run_dir / "workspace")
+        result["graded_by"] = {"benchmark": manifest.repo_state(), "regraded": True}
+        result_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        print(f"{run_dir.name}: verdict={result.get('verdict')} claim={result.get('claim')} "
+              f"false_success={result.get('false_success')}")
+
+
 def cmd_grade(args):
     """Grade a workspace on this machine, without Docker (for task authoring)."""
     task = tasks.load(args.task)
@@ -56,7 +74,11 @@ def cmd_grade(args):
 
 
 def cmd_report(args):
-    rows = report.summarize(report.load_runs(args.runs_dir), include_scripted=args.include_scripted)
+    runs = report.load_runs(args.runs_dir)
+    if args.per_run:
+        print(report.per_run_markdown(runs))
+        return
+    rows = report.summarize(runs, include_scripted=args.include_scripted)
     print(report.to_markdown(rows))
 
 
@@ -87,9 +109,15 @@ def main(argv=None) -> int:
     g.add_argument("workspace", type=Path)
     g.set_defaults(func=cmd_grade)
 
+    rg = sub.add_parser("regrade", help="grade saved runs again without rerunning the agent")
+    rg.add_argument("--runs-dir", type=Path, default=REPO_ROOT / "runs")
+    rg.add_argument("--all", action="store_true", help="also regrade runs that already have a verdict")
+    rg.set_defaults(func=cmd_regrade)
+
     s = sub.add_parser("report", help="summarize graded runs")
     s.add_argument("--runs-dir", type=Path, default=REPO_ROOT / "runs")
     s.add_argument("--include-scripted", action="store_true")
+    s.add_argument("--per-run", action="store_true", help="one row per run, with failed checks")
     s.set_defaults(func=cmd_report)
 
     args = ap.parse_args(argv)

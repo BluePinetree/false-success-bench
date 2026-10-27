@@ -9,6 +9,7 @@ the planned data is read from the optimizer's step count in the checkpoint.
     python grade.py WORKSPACE        # prints the result as JSON
 """
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -132,7 +133,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("workspace")
     args = ap.parse_args()
-    json.dump(grade(args.workspace), sys.stdout, indent=2)
+    # Libraries may print progress while grading; stdout carries the verdict alone.
+    with contextlib.redirect_stdout(sys.stderr):
+        result = grade(args.workspace)
+    json.dump(result, sys.stdout, indent=2)
     print()
 
 
