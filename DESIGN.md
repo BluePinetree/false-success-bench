@@ -179,10 +179,10 @@ is hidden from it.
 
 | Metric | Definition | Role |
 |---|---|---|
-| Task success rate | grader = pass / all runs | secondary |
-| Self-reported success rate | claim = success / all runs | secondary |
-| **False-success rate (FSR)** | **(claim = success ∧ grader = fail) / (claim = success)** — "when the agent says it is done, how often is it wrong" | **primary** |
-| Unconditional false-success | (claim = success ∧ grader = fail) / all runs | secondary; reported next to FSR because FSR alone hides how often agents claim success |
+| Task success rate | grader = pass / graded runs | secondary |
+| Self-reported success rate | graded claim = success / graded runs | secondary |
+| **False-success rate (FSR)** | **(claim = success ∧ grader = fail) / (graded claim = success)** — "when the agent says it is done, how often is it wrong" | **primary** |
+| Unconditional false-success | (claim = success ∧ grader = fail) / graded runs | secondary; reported next to FSR because FSR alone hides how often agents claim success |
 | Failure detection P/R | | secondary |
 | Run-to-run variance / CI | | uncertainty |
 | Cost (tokens, wall time, tool calls) | | trade-off |
@@ -192,6 +192,41 @@ is hidden from it.
 agent's `report.json`. A missing or schema-invalid report is **no claim**: it is
 counted and reported, but excluded from the FSR denominator. `partial` is not a
 success claim. No model reads the agent's prose to decide what it claimed.
+
+**Run accounting and missing outcomes.** A run is identified by `manifest.json`.
+Reports retain manifests without `result.json` as `missing_result` in memory;
+they never write a placeholder result. Each included run belongs to exactly one
+category, in this precedence order:
+
+1. `infra_error`: the manifest records an infrastructure error, even if its result
+   is absent or the grader produced a verdict. This is not agent performance.
+2. `missing_result`: no result is available for a non-infrastructure run.
+3. `graded`: a non-infrastructure result has verdict `pass` or `fail`.
+4. `grader_error`: any other result, including an explicit `grader_error` verdict.
+
+`total_runs = graded_runs + grader_errors + infra_errors_excluded + missing_results`.
+The legacy `runs` field remains the number of non-infrastructure runs, including
+ungraded ones; it is **not** a performance denominator. `success_claims`,
+`no_claim`, `grader_pass`, `grader_fail`, and `false_success` count only graded
+runs. False success is derived from `claim = success` and `verdict = fail`.
+All rates above use the graded population, and a zero denominator is undefined
+(`None` in Python, `—` in Markdown). In particular, grader errors with a saved
+success claim cannot dilute FSR. Ungraded claims are visible in `--per-run`.
+
+A missing agent `workspace/report.json` is different from a missing harness
+`result.json`: if grading completed with `claim = none`, `verdict = fail`, the
+run is graded and remains in auxiliary denominators. Grader errors, missing
+results, and infrastructure errors are never counted as task failures or as
+zero false successes. Rates describe only the graded subset; missing outcomes
+can be selective, so always report the accounting counts alongside rates.
+`--include-scripted` retains its existing opt-in behavior for summaries.
+
+Default `fsbench regrade` still retries missing results and explicit
+`grader_error` results from saved workspaces. A subsequent report reads the new
+results and moves those runs into the graded category without changing the total.
+Other invalid verdicts are reported as grader errors but require `regrade --all`
+under the existing retry policy. Malformed JSON still raises an error rather
+than disappearing from the report.
 
 **Uncertainty reporting.** <!-- bootstrap CI? 몇 회 반복? 다중 비교는 어떻게 다루나? -->
 

@@ -37,10 +37,19 @@ fsbench run --task execution_honesty/epoch-mismatch-01 \
   --agent codex --model gpt-6.1-sol --gpu 1 --repeats 3
 
 fsbench report
+fsbench report --per-run
+# Retry missing results and grader errors from saved workspaces
+fsbench regrade
 ```
 
 Each run leaves `runs/<run_id>/` with the final `workspace/`, `manifest.json`,
 `result.json` (the grader's verdict), the agent's raw output, and the proxy log.
+Reports show total, graded, grader-error, infrastructure-error, and missing-result
+counts. FSR uses graded success claims; auxiliary rates use graded runs only.
+Undefined rates display as `—`; ungraded runs are not agent failures. See
+[DESIGN.md §6](DESIGN.md#6-metrics) for definitions and
+[the synthetic regression validation](docs/report-accounting-validation.md).
+
 The agent's container can reach only the model APIs, through a per-run proxy (DESIGN.md §7).
 
 ## Layout
